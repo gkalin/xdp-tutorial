@@ -3,13 +3,14 @@
 #include <bpf/bpf_helpers.h>
 
 #include "common_kern_user.h" /* defines: struct datarec; */
+#include <stdint.h>
 
 /* Lesson#1: See how a map is defined.
  * - Here an array with XDP_ACTION_MAX (max_)entries are created.
  * - The idea is to keep stats per (enum) xdp_action
  */
 struct {
-	__uint(type, BPF_MAP_TYPE_ARRAY);
+	__uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
 	__type(key, __u32);
 	__type(value, struct datarec);
 	__uint(max_entries, XDP_ACTION_MAX);
@@ -36,13 +37,17 @@ int  xdp_stats1_func(struct xdp_md *ctx)
 	 * check isn't performed here. Even-though this is a static array where
 	 * we know key lookup XDP_PASS always will succeed.
 	 */
-	if (!rec)
-		return XDP_ABORTED;
+	if (!rec) 
+    return XDP_ABORTED;
+  void *data_end = (void*)(int64_t)ctx->data_end;
+  void *data = (void*)(int64_t)ctx->data;
+  uint64_t num_bytes = data_end - data;
 
 	/* Multiple CPUs can access data record. Thus, the accounting needs to
 	 * use an atomic operation.
 	 */
 	lock_xadd(&rec->rx_packets, 1);
+  lock_xadd(&rec->rx_bytes, num_bytes);
         /* Assignment#1: Add byte counters
          * - Hint look at struct xdp_md *ctx (copied below)
          *
